@@ -3,10 +3,12 @@ package com.bootcamp.endava.bootcamp;
 
 import android.app.Fragment;
 import android.app.FragmentTransaction;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.provider.BaseColumns;
 import android.support.design.widget.FloatingActionButton;
@@ -18,16 +20,14 @@ import android.widget.AdapterView;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import com.bootcamp.endava.bootcamp.contentprovider.SongsProvider;
 import com.bootcamp.endava.bootcamp.database.MusicContract;
 import com.bootcamp.endava.bootcamp.database.MusicDbHelper;
 
 public class MainActivity extends AppCompatActivity
         implements View.OnClickListener, AddSongDialogFragment.Callback {
 
-    private static final int QUERY_ALL_VALUE = -1;
     FloatingActionButton mFab;
-    SQLiteDatabase mDatabase;
-    MusicDbHelper mDbHelper;
     ListView mList;
     SongsAdapter mAdapter;
 
@@ -40,13 +40,12 @@ public class MainActivity extends AppCompatActivity
         mList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                new QuerySongsTask((Integer) view.getTag()).execute();
+                new QuerySongsTask(ContentUris.withAppendedId(MusicContract.Song.CONTENT_URI,
+                        (Integer)view.getTag()), true).execute();
             }
         });
         mFab.setOnClickListener(this);
-        mDbHelper = new MusicDbHelper(this);
-        mDatabase = mDbHelper.getWritableDatabase();
-        new QuerySongsTask(QUERY_ALL_VALUE).execute();
+        new QuerySongsTask(MusicContract.Song.CONTENT_URI, false).execute();
     }
 
     @Override
@@ -84,8 +83,8 @@ public class MainActivity extends AppCompatActivity
         cv.put(MusicContract.Song.TITLE, title);
         cv.put(MusicContract.Song.AUTHOR, author);
         cv.put(MusicContract.Song.GENRE, genre);
-        mDatabase.insert(MusicContract.Song.TABLE_NAME, null, cv);
-        new QuerySongsTask(-1).execute();
+        getContentResolver().insert(MusicContract.Song.CONTENT_URI, cv);
+        new QuerySongsTask(MusicContract.Song.CONTENT_URI, false).execute();
     }
 
     @Override
@@ -94,36 +93,29 @@ public class MainActivity extends AppCompatActivity
         cv.put(MusicContract.Song.TITLE, title);
         cv.put(MusicContract.Song.AUTHOR, author);
         cv.put(MusicContract.Song.GENRE, genre);
-        String selection = BaseColumns._ID + " =?";
-        String [] selectionArgs = new String[] {String.valueOf(id)};
-        mDatabase.update(MusicContract.Song.TABLE_NAME, cv, selection, selectionArgs);
-        new QuerySongsTask(-1).execute();
+        getContentResolver().update(
+                ContentUris.withAppendedId(MusicContract.Song.CONTENT_URI, (long)id), cv, null,
+                null);
+        new QuerySongsTask(MusicContract.Song.CONTENT_URI, false).execute();
     }
 
     private class QuerySongsTask extends AsyncTask<Void, Void, Cursor> {
+        Uri mUri;
+        boolean mIsUpdate;
 
-        int mId;
-
-        public QuerySongsTask(int id) {
-            mId = id;
+        public QuerySongsTask(Uri uri, boolean isUpdate) {
+            mUri = uri;
+            mIsUpdate = isUpdate;
         }
 
         @Override
         protected Cursor doInBackground(Void... voids) {
-            if (mId == QUERY_ALL_VALUE) {
-                return mDatabase.query(MusicContract.Song.TABLE_NAME, null, null, null, null, null,
-                        null);
-            } else {
-                return mDatabase.query(MusicContract.Song.TABLE_NAME, null, BaseColumns._ID + "=?",
-                        new String[] {
-                                String.valueOf(mId)
-                        }, null, null, null);
-            }
+            return getContentResolver().query(mUri, null, null, null, null);
         }
 
         @Override
         protected void onPostExecute(Cursor c) {
-            if (mId == QUERY_ALL_VALUE) {
+            if (!mIsUpdate) {
                 mAdapter = new SongsAdapter(MainActivity.this, c);
                 mList.setAdapter(mAdapter);
             } else {
@@ -134,7 +126,7 @@ public class MainActivity extends AppCompatActivity
                 String title = c.getString(c.getColumnIndex(MusicContract.Song.TITLE));
                 String author = c.getString(c.getColumnIndex(MusicContract.Song.AUTHOR));
                 String genre = c.getString(c.getColumnIndex(MusicContract.Song.GENRE));
-                displayAddSongFragment(mId, title, author, genre);
+                displayAddSongFragment(Integer.valueOf(mUri.getLastPathSegment()), title, author, genre);
             }
         }
     }
