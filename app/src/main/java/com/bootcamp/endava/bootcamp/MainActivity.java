@@ -1,20 +1,27 @@
 
 package com.bootcamp.endava.bootcamp;
 
+import android.app.DialogFragment;
 import android.app.Fragment;
 import android.app.FragmentTransaction;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.DialogInterface;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.provider.BaseColumns;
 import android.support.design.widget.FloatingActionButton;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.AttributeSet;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ListView;
@@ -27,9 +34,11 @@ import com.bootcamp.endava.bootcamp.database.MusicDbHelper;
 public class MainActivity extends AppCompatActivity
         implements View.OnClickListener, AddSongDialogFragment.Callback {
 
+    private static final String SHARED_PREFS_KEY_SORT = "sort";
     FloatingActionButton mFab;
     ListView mList;
     SongsAdapter mAdapter;
+    String mSortOrder;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,6 +53,8 @@ public class MainActivity extends AppCompatActivity
                         (Integer)view.getTag()), true).execute();
             }
         });
+        mSortOrder = getPreferences(MODE_PRIVATE).getString(SHARED_PREFS_KEY_SORT,
+                MusicContract.Song.TITLE);
         mFab.setOnClickListener(this);
         new QuerySongsTask(MusicContract.Song.CONTENT_URI, false).execute();
     }
@@ -55,6 +66,49 @@ public class MainActivity extends AppCompatActivity
                 displayAddSongFragment();
                 break;
         }
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.sort_order) {
+            final AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+            dialogBuilder.setTitle("Sort Type");
+            dialogBuilder.setSingleChoiceItems(new String[] {
+                    "title", "genre", "author"
+            }, -1, new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialogInterface, int i) {
+                    SharedPreferences sp = MainActivity.this.getPreferences(Context.MODE_PRIVATE);
+                    switch (i) {
+                        case 0:
+                            mSortOrder = MusicContract.Song.TITLE;
+                            sp.edit().putString(SHARED_PREFS_KEY_SORT, MusicContract.Song.TITLE)
+                                    .commit();
+                            break;
+                        case 1:
+                            mSortOrder = MusicContract.Song.GENRE;
+                            sp.edit().putString(SHARED_PREFS_KEY_SORT, MusicContract.Song.GENRE)
+                                    .commit();
+                            break;
+                        case 2:
+                            mSortOrder = MusicContract.Song.AUTHOR;
+                            sp.edit().putString(SHARED_PREFS_KEY_SORT, MusicContract.Song.AUTHOR)
+                                    .commit();
+                            break;
+                    }
+                    new QuerySongsTask(MusicContract.Song.CONTENT_URI, false).execute();
+                    dialogInterface.dismiss();
+                }
+            });
+            dialogBuilder.show();
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.main_activity_menu, menu);
+        return super.onCreateOptionsMenu(menu);
     }
 
     private void displayAddSongFragment() {
@@ -110,7 +164,7 @@ public class MainActivity extends AppCompatActivity
 
         @Override
         protected Cursor doInBackground(Void... voids) {
-            return getContentResolver().query(mUri, null, null, null, null);
+            return getContentResolver().query(mUri, null, null, null, mSortOrder + " ASC");
         }
 
         @Override
@@ -126,7 +180,8 @@ public class MainActivity extends AppCompatActivity
                 String title = c.getString(c.getColumnIndex(MusicContract.Song.TITLE));
                 String author = c.getString(c.getColumnIndex(MusicContract.Song.AUTHOR));
                 String genre = c.getString(c.getColumnIndex(MusicContract.Song.GENRE));
-                displayAddSongFragment(Integer.valueOf(mUri.getLastPathSegment()), title, author, genre);
+                displayAddSongFragment(Integer.valueOf(mUri.getLastPathSegment()), title, author,
+                        genre);
             }
         }
     }
